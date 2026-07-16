@@ -1,0 +1,100 @@
+// ====================================================================
+// H3X LANGUAGE INTERPRETER - AN ESOTERIC PROGRAMMING LANGUAGE (ESOLANG)
+// Developed by: hÆçĸ3ŗ
+// Architecture: ARM64 / AArch64 (Linux / Android Termux)
+// ====================================================================
+
+.global _start
+
+.section .data
+    // Το H3X πρόγραμμά σου: Τυπώνει "Guess: " και περιμένει το '7' για να βγάλει 'W'
+    source_code: .ascii "+++++++.---.+++++++.---.---.+++++++.!-------------------------------------------------------."
+    
+    msg_init:    .ascii "--- H3X GAME ENGINE STARTING ---\n"
+    len_init =   . - msg_init
+    
+    newline:     .ascii "\n"
+
+.section .bss
+    print_buf:   .skip 8        // Buffer για sys_write
+    input_buf:   .skip 8        // Buffer για sys_read
+
+.section .text
+_start:
+    // 1. Εκτύπωση αρχικού μηνύματος
+    mov     x0, #1
+    adrp    x1, msg_init
+    add     x1, x1, :lo12:msg_init
+    ldr     x2, =len_init
+    mov     x8, #64             // sys_write
+    svc     #0
+
+    // 2. Προετοιμασία των registers για το Interpretation
+    adrp    x19, source_code
+    add     x19, x19, :lo12:source_code // x19 = Διεύθυνση του κώδικα H3X (προστατευμένη)
+    
+    mov     x20, #65            // x20 = Η τιμή του κελιού (ξεκινάει από ASCII 'A')
+
+interpret_loop:
+    ldrb    w2, [x19], #1       // Διάβασε την επόμενη εντολή H3X
+    cbz     w2, interpret_done  // Αν βρεις NULL (\0), ο κώδικας τελείωσε
+
+    // --- ΕΝΤΟΛΗ '+': Αύξηση τιμής ---
+    cmp     w2, #43             // 43 = '+'
+    b.ne    check_minus
+    add     x20, x20, #1        
+    b       interpret_loop
+
+check_minus:
+    // --- ΕΝΤΟΛΗ '-': Μείωση τιμής ---
+    cmp     w2, #45             // 45 = '-'
+    b.ne    check_print
+    sub     x20, x20, #1        
+    b       interpret_loop
+
+check_print:
+    // --- ΕΝΤΟΛΗ '.': Εκτύπωση χαρακτήρα ---
+    cmp     w2, #46             // 46 = '.'
+    b.ne    check_input
+    
+    adrp    x1, print_buf
+    add     x1, x1, :lo12:print_buf
+    strb    w20, [x1]           
+    
+    mov     x0, #1              // stdout
+    mov     x2, #1              // 1 byte
+    mov     x8, #64             // sys_write
+    svc     #0
+    b       interpret_loop
+
+check_input:
+    // --- ΕΝΤΟΛΗ '!': Διάβασμα από το πληκτρολόγιο ---
+    cmp     w2, #33             // 33 = '!'
+    b.ne    interpret_loop      
+    
+    adrp    x1, input_buf
+    add     x1, x1, :lo12:input_buf
+    
+    mov     x0, #0              // stdin
+    mov     x2, #2              // Χαρακτήρας + Newline
+    mov     x8, #63             // sys_read
+    svc     #0                  
+    
+    adrp    x1, input_buf
+    add     x1, x1, :lo12:input_buf
+    ldrb    w20, [x1]           // Αποθήκευση του χαρακτήρα στο κελί x20
+    b       interpret_loop
+
+interpret_done:
+    // 3. Εκτύπωση Newline στο τέλος
+    mov     x0, #1
+    adrp    x1, newline
+    add     x1, x1, :lo12:newline
+    mov     x2, #1
+    mov     x8, #64
+    svc     #0
+
+    // 4. Καθαρή έξοδος (sys_exit)
+    mov     x0, #0
+    mov     x8, #93             
+    svc     #0
